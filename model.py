@@ -81,7 +81,7 @@ class DCGAN(object):
     if self.is_crop:
       image_dims = [self.output_height, self.output_width, self.c_dim]
     else:
-      image_dims = [self.input_height, self.input_width, self.c_dim]
+      image_dims = [self.input_height, self.input_height, self.c_dim]
 
     self.inputs = tf.placeholder(
       tf.float32, [self.batch_size] + image_dims, name='real_images')
@@ -100,7 +100,7 @@ class DCGAN(object):
       self.D, self.D_logits = \
           self.discriminator(inputs, self.y, reuse=False)
 
-      self.sampler = self.sampler(self.z, self.y)
+      self.sampler = self.sampler(self.z, self.y) # just used for test, generate samples, not backprop
       self.D_, self.D_logits_ = \
           self.discriminator(self.G, self.y, reuse=True)
     else:
@@ -111,14 +111,14 @@ class DCGAN(object):
       self.D_, self.D_logits_ = self.discriminator(self.G, reuse=True)
 
     self.d_sum = histogram_summary("d", self.D)
-    self.d__sum = histogram_summary("d_", self.D_)
+    self.d__sum = histogram_summary("d_f", self.D_)
     self.G_sum = image_summary("G", self.G)
 
     def sigmoid_cross_entropy_with_logits(x, y):
       try:
-        return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
+        tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=y)
       except:
-        return tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
+        tf.nn.sigmoid_cross_entropy_with_logits(logits=x, targets=y)
 
     self.d_loss_real = tf.reduce_mean(
       sigmoid_cross_entropy_with_logits(self.D_logits, tf.ones_like(self.D)))
@@ -187,9 +187,8 @@ class DCGAN(object):
   
     counter = 1
     start_time = time.time()
-    could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-    if could_load:
-      counter = checkpoint_counter
+
+    if self.load(self.checkpoint_dir):
       print(" [*] Load SUCCESS")
     else:
       print(" [!] Load failed...")
@@ -443,7 +442,7 @@ class DCGAN(object):
         yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
         z = concat([z, y], 1)
 
-        h0 = tf.nn.relu(self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
+        h0 = tf.nn.relu(self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin')))
         h0 = concat([h0, y], 1)
 
         h1 = tf.nn.relu(self.g_bn1(
@@ -512,7 +511,6 @@ class DCGAN(object):
             global_step=step)
 
   def load(self, checkpoint_dir):
-    import re
     print(" [*] Reading checkpoints...")
     checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
 
@@ -520,9 +518,8 @@ class DCGAN(object):
     if ckpt and ckpt.model_checkpoint_path:
       ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
       self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
-      counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
       print(" [*] Success to read {}".format(ckpt_name))
-      return True, counter
+      return True
     else:
       print(" [*] Failed to find a checkpoint")
-      return False, 0
+      return False

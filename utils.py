@@ -11,16 +11,9 @@ import numpy as np
 from time import gmtime, strftime
 from six.moves import xrange
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-
 pp = pprint.PrettyPrinter()
 
 get_stddev = lambda x, k_h, k_w: 1/math.sqrt(k_w*k_h*x.get_shape()[-1])
-
-def show_all_variables():
-  model_vars = tf.trainable_variables()
-  slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 def get_image(image_path, input_height, input_width,
               resize_height=64, resize_width=64,
@@ -31,6 +24,19 @@ def get_image(image_path, input_height, input_width,
 
 def save_images(images, size, image_path):
   return imsave(inverse_transform(images), size, image_path)
+
+def save_images_1by1(images,image_path):
+  for idx, image in enumerate(images):
+    save_path = image_path+'_%s.png'%str(idx) 
+    scipy.misc.imsave(save_path, image)
+
+def save_z(z_samples, save_path):
+  with open(save_path, 'w') as foutput:
+    for z_sample in z_samples:
+      for z_value in z_sample:
+        foutput.write('{z_value:.4f} '.format(z_value=z_value))
+      foutput.write('\n')
+      foutput.flush()
 
 def imread(path, is_grayscale = False):
   if (is_grayscale):
@@ -157,11 +163,14 @@ def make_gif(images, fname, duration=2, true_image=False):
   clip.write_gif(fname, fps = len(images) / duration)
 
 def visualize(sess, dcgan, config, option):
-  image_frame_dim = int(math.ceil(config.batch_size**.5))
   if option == 0:
-    z_sample = np.random.uniform(-0.5, 0.5, size=(config.batch_size, dcgan.z_dim))
-    samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
-    save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+    for idx in xrange(100):
+      print(" [*] %d" % idx)
+      z_sample = np.random.uniform(-1, 1, size=(config.batch_size, dcgan.z_dim))
+      samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+      save_images(samples, [8, 8], './samples/test_%s.png' % (idx))
+      save_z(z_sample,'./samples/test_arange_%s.txt' % (idx))
+      #save_images_1by1(samples,'./samples/test_arange_%s' % (idx))
   elif option == 1:
     values = np.arange(0, 1, 1./config.batch_size)
     for idx in xrange(100):
@@ -179,7 +188,8 @@ def visualize(sess, dcgan, config, option):
       else:
         samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
 
-      save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_arange_%s.png' % (idx))
+      #save_images(samples, [8, 8], './samples/test_arange_%s.png' % (idx))
+      save_images_1by1(samples,'./samples/test_arange_%s' % (idx))
   elif option == 2:
     values = np.arange(0, 1, 1./config.batch_size)
     for idx in [random.randint(0, 99) for _ in xrange(100)]:
@@ -202,7 +212,7 @@ def visualize(sess, dcgan, config, option):
       try:
         make_gif(samples, './samples/test_gif_%s.gif' % (idx))
       except:
-        save_images(samples, [image_frame_dim, image_frame_dim], './samples/test_%s.png' % strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+        save_images(samples, [8, 8], './samples/test_%s.png' % strftime("%Y-%m-%d %H:%M:%S", gmtime()))
   elif option == 3:
     values = np.arange(0, 1, 1./config.batch_size)
     for idx in xrange(100):
@@ -228,3 +238,64 @@ def visualize(sess, dcgan, config, option):
     new_image_set = [merge(np.array([images[idx] for images in image_set]), [10, 10]) \
         for idx in range(64) + range(63, -1, -1)]
     make_gif(new_image_set, './samples/test_gif_merged.gif', duration=8)
+  elif option == 5:
+    z_sample = np.loadtxt('z_sample_select.txt')
+    z_sample_male_glass_average = np.mean(z_sample[0:3,:], axis = 0)
+    z_sample_male_average = np.mean(z_sample[3:6,:], axis = 0)
+    z_sample_female_average = np.mean(z_sample[6:,:], axis = 0)
+    z_sample_glass = z_sample_male_glass_average - z_sample_male_average
+    z_sample_female_glass = z_sample_female_average + z_sample_glass
+    print z_sample_glass
+    z_sample_others = np.zeros([50, dcgan.z_dim])
+    z_sample = np.vstack([z_sample,z_sample_male_glass_average,z_sample_male_average,z_sample_female_average,z_sample_glass,z_sample_female_glass,z_sample_others])
+
+    samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample})
+    save_images(samples, [8, 8], './samples/test_glass.png')
+    save_z(z_sample,'./samples/test_glass.txt')
+  elif option == 6:
+    z_sample =  np.loadtxt('turn_z_select.txt')
+    z_sample_left_average = np.mean(z_sample[0:4,:],axis = 0)
+    z_sample_right_average = np.mean(z_sample[4:,:],axis = 0)
+    turn_vector = z_sample_right_average - z_sample_left_average
+    z_sample_all = np.zeros([6,dcgan.z_dim])
+    z_sample_all=np.vstack((z_sample_all,z_sample_left_average))
+    z_sample_all=np.vstack((z_sample_all,z_sample_right_average))
+    for i in range(4):
+      current_z = z_sample[i,:]
+      z_sample_all=np.vstack((z_sample_all,current_z))
+      for times in range(7):
+        current_z = current_z + turn_vector/7
+        z_sample_all = np.vstack((z_sample_all,current_z))
+    for i in range(3):
+      current_z = z_sample[4+i,:]
+      z_sample_all=np.vstack((z_sample_all,current_z))
+      for times in range(7):
+        current_z = current_z - turn_vector/7
+        z_sample_all = np.vstack((z_sample_all,current_z))
+
+    samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample_all})
+    save_images(samples, [8, 8], './samples/test_turn.png')
+    save_z(z_sample,'./samples/test_turn.txt')
+   
+  elif option == 7:
+    z_sample =  np.loadtxt('transform_z_select.txt')
+    length = int(len(z_sample))
+    print length
+    z_sample_all = np.zeros([64-4*length,dcgan.z_dim])
+    for i in range(int(length/2)):
+      z_sample_first = z_sample[2*i,:]
+      z_sample_last = z_sample[2*i+1,:]
+      diff_vector = z_sample_last - z_sample_first        
+      z_sample_all=np.vstack((z_sample_all,z_sample_first))
+      for j in range(6):
+        current_z = z_sample_first + (j+1)*diff_vector/7
+        z_sample_all = np.vstack((z_sample_all,current_z))
+      z_sample_all=np.vstack((z_sample_all,z_sample_last))
+
+    samples = sess.run(dcgan.sampler, feed_dict={dcgan.z: z_sample_all})
+    save_images(samples, [8, 8], './samples/test_transform.png')
+    # save_z(z_sample,'./samples/test_transform.txt')
+
+
+
+

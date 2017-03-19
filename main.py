@@ -3,7 +3,7 @@ import scipy.misc
 import numpy as np
 
 from model import DCGAN
-from utils import pp, visualize, to_json, show_all_variables
+from utils import pp, visualize, to_json
 
 import tensorflow as tf
 
@@ -75,7 +75,6 @@ def main(_):
           checkpoint_dir=FLAGS.checkpoint_dir,
           sample_dir=FLAGS.sample_dir)
 
-    show_all_variables()
     if FLAGS.is_train:
       dcgan.train(FLAGS)
     else:
@@ -90,7 +89,7 @@ def main(_):
     #                 [dcgan.h4_w, dcgan.h4_b, None])
 
     # Below is codes for visualization
-    OPTION = 1
+    OPTION = 5
     visualize(sess, dcgan, FLAGS, OPTION)
 
 if __name__ == '__main__':
